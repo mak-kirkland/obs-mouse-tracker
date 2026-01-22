@@ -4,6 +4,12 @@ A lightweight Lua script for OBS Studio on Linux that automatically pans a video
 
 This tool is designed for content creators on Linux (X11) who want to record **vertical (9:16) TikTok/Reels/Shorts** on a standard **horizontal (16:9) monitor**. Instead of cropping your screen to a static area, this script smoothly follows your cursor movement.
 
+## Support
+
+If you find this script useful, please consider supporting me on Patreon:
+
+❤️ [Support on Patreon](https://patreon.com/MichaelKirkland)
+
 ## Features
 
 -   **Native Linux Support:** Uses LuaJIT FFI to interface directly with X11 (`libX11`); no external Python scripts or background processes required.
