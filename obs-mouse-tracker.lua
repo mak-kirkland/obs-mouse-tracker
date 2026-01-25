@@ -50,6 +50,7 @@ local settings = {
 local x11_display = nil
 local current_x = 0
 local current_y = 0
+local cached_scene_item = nil -- Cache for performance optimization
 
 -- Description shown in OBS
 function script_description()
@@ -122,10 +123,27 @@ function script_update(s)
     settings.center_viewport = obs.obs_data_get_bool(s, "center_viewport")
     settings.x_offset = obs.obs_data_get_int(s, "x_offset")
     settings.y_offset = obs.obs_data_get_int(s, "y_offset")
+
+    -- Invalidate cache when settings change
+    cached_scene_item = nil
+end
+
+-- Event handler to invalidate cache on scene changes
+function on_event(event)
+    if event == obs.OBS_FRONTEND_EVENT_SCENE_CHANGED or
+       event == obs.OBS_FRONTEND_EVENT_PREVIEW_SCENE_CHANGED or
+       event == obs.OBS_FRONTEND_EVENT_STUDIO_MODE_ENABLED or
+       event == obs.OBS_FRONTEND_EVENT_STUDIO_MODE_DISABLED or
+       event == obs.OBS_FRONTEND_EVENT_SCENE_COLLECTION_CHANGED then
+        cached_scene_item = nil
+    end
 end
 
 -- Initialize X11 connection
 function script_load(settings)
+    -- Add event callback for cache management
+    obs.obs_frontend_add_event_callback(on_event)
+
     -- List of library names to try.
     -- Debian usually requires 'libX11.so.6' if the dev package isn't installed.
     local lib_candidates = {
@@ -238,22 +256,43 @@ function script_tick(seconds)
     end
 
     -- 6. Apply to OBS Scene Item
-    local source = obs.obs_get_source_by_name(settings.source_name)
-    if source ~= nil then
-        local scene_source = obs.obs_frontend_get_current_scene()
+
+    -- If we have a cached item, verify it's still valid
+    if cached_scene_item then
+        if obs.obs_sceneitem_get_source(cached_scene_item) == nil then
+            cached_scene_item = nil -- Item was deleted or became invalid
+        end
+    end
+
+    -- If no valid cache, find the item
+    if not cached_scene_item then
+        local scene_source = nil
+
+        -- Support for Studio Mode: Prefer Preview scene if active
+        if obs.obs_frontend_preview_program_mode_active() then
+            scene_source = obs.obs_frontend_get_current_preview_scene()
+        else
+            scene_source = obs.obs_frontend_get_current_scene()
+        end
+
         if scene_source ~= nil then
             local scene = obs.obs_scene_from_source(scene_source)
             if scene ~= nil then
-                local scene_item = obs.obs_scene_find_source(scene, settings.source_name)
-                if scene_item ~= nil then
-                    local pos = obs.vec2()
-                    pos.x = final_x
-                    pos.y = final_y
-                    obs.obs_sceneitem_set_pos(scene_item, pos)
+                -- Direct scene lookup (removed redundant obs_get_source_by_name)
+                local item = obs.obs_scene_find_source(scene, settings.source_name)
+                if item ~= nil then
+                    cached_scene_item = item
                 end
             end
             obs.obs_source_release(scene_source)
         end
-        obs.obs_source_release(source)
+    end
+
+    -- Apply movement if item is found
+    if cached_scene_item then
+        local pos = obs.vec2()
+        pos.x = final_x
+        pos.y = final_y
+        obs.obs_sceneitem_set_pos(cached_scene_item, pos)
     end
 end
