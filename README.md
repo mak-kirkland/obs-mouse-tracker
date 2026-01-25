@@ -8,8 +8,9 @@ This tool supports **vertical (9:16) content**, **square crops**, or **arbitrary
 
 ## Support
 
-If you find this script useful, please consider supporting me on Patreon:
+If you find this script useful, please consider supporting me:
 
+☕️ [Buy Me a Coffee](https://buymeacoffee.com/chronicler)
 ❤️ [Support on Patreon](https://patreon.com/MichaelKirkland)
 
 ## Features
