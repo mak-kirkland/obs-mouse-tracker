@@ -49,7 +49,7 @@ To create vertical content, you must set your OBS Canvas to a vertical aspect ra
 In the **Tools -> Scripts** window, click on `mouse_follow_linux.lua` to access the settings panel:
 
 * **Source to Pan:** Select your Screen Capture (XSHM) source.
-* **Smoothness:** Controls the camera lag/follow speed.
+* **Tracking Speed:** Controls the camera lag/follow speed.
     * `0.1` = Cinematic/Slow
     * `0.5` = Fast/Gaming
     * `1.0` = Instant (No smoothing)

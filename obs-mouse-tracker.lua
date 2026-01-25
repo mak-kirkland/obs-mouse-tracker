@@ -35,7 +35,7 @@ ffi.cdef[[
 -- Script Settings
 local settings = {
     source_name = "",
-    smoothness = 0.1, -- 0.01 (slow) to 1.0 (instant)
+    tracking_speed = 0.1, -- 0.01 (slow/cinematic) to 1.0 (instant)
     monitor_width = 1920,
     canvas_width = 608, -- 1080 * (9/16) ~= 608
     x_offset = 0 -- Adjust if you have multiple monitors left of main
@@ -61,7 +61,7 @@ end
 -- Define default settings (Fixes the issue where OBS defaults to min slider value)
 function script_defaults(settings)
     obs.obs_data_set_default_string(settings, "source_name", "")
-    obs.obs_data_set_default_double(settings, "smoothness", 0.1)
+    obs.obs_data_set_default_double(settings, "tracking_speed", 0.1)
     obs.obs_data_set_default_int(settings, "monitor_width", 1920)
     obs.obs_data_set_default_int(settings, "canvas_width", 608)
     obs.obs_data_set_default_int(settings, "x_offset", 0)
@@ -82,7 +82,9 @@ function script_properties()
         obs.source_list_release(sources)
     end
 
-    obs.obs_properties_add_float_slider(props, "smoothness", "Smoothness", 0.01, 1.0, 0.01)
+    -- Renamed from "Smoothness" to "Tracking Speed" for clarity
+    obs.obs_properties_add_float_slider(props, "tracking_speed", "Tracking Speed", 0.01, 1.0, 0.01)
+
     obs.obs_properties_add_int(props, "monitor_width", "Monitor Width", 800, 7680, 1)
     obs.obs_properties_add_int(props, "canvas_width", "Canvas Width (Target)", 100, 4000, 1)
     obs.obs_properties_add_int(props, "x_offset", "X Offset (Multimonitor)", -5000, 5000, 1)
@@ -93,7 +95,7 @@ end
 -- Update settings values
 function script_update(s)
     settings.source_name = obs.obs_data_get_string(s, "source_name")
-    settings.smoothness = obs.obs_data_get_double(s, "smoothness")
+    settings.tracking_speed = obs.obs_data_get_double(s, "tracking_speed")
     settings.monitor_width = obs.obs_data_get_int(s, "monitor_width")
     settings.canvas_width = obs.obs_data_get_int(s, "canvas_width")
     settings.x_offset = obs.obs_data_get_int(s, "x_offset")
@@ -189,11 +191,18 @@ function script_tick(seconds)
     if desired_source_x < min_x then desired_source_x = min_x end
 
     -- 4. Apply Smoothing (Lerp)
-    -- Adjust framerate dependency roughly
+    -- If the camera is practically already there, skip the update logic to save CPU
+    if math.abs(current_x - desired_source_x) < 0.5 then
+        return
+    end
+
     local fps_mult = seconds * 60
-    current_x = lerp(current_x, desired_source_x, settings.smoothness * fps_mult)
+    -- Clamp t to 1.0 to prevent overshooting if framerate dips
+    local t = math.min(1.0, settings.tracking_speed * fps_mult)
+    current_x = lerp(current_x, desired_source_x, t)
 
     -- 5. Apply to OBS Scene Item
+    -- Lookup chain: Source -> Current Scene -> Scene Item -> Set Pos
     local source = obs.obs_get_source_by_name(settings.source_name)
     if source ~= nil then
         local scene_source = obs.obs_frontend_get_current_scene()
