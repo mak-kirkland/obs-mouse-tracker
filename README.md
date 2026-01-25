@@ -1,8 +1,8 @@
 # OBS Linux Mouse Follower
 
-A lightweight Lua script for OBS Studio on Linux that automatically pans a video source to keep your mouse cursor centered.
+A lightweight Lua script for OBS Studio on Linux that automatically pans a video source to keep your mouse cursor centered within the viewport.
 
-This tool is designed for content creators on Linux (X11) who want to record **vertical (9:16) TikTok/Reels/Shorts** on a standard **horizontal (16:9) monitor**. Instead of cropping your screen to a static area, this script smoothly follows your cursor movement.
+This tool supports **vertical (9:16) content**, **square crops**, or **arbitrary 2D tracking**, allowing you to create any size "viewport" around your cursor.
 
 ## Support
 
@@ -12,58 +12,58 @@ If you find this script useful, please consider supporting me on Patreon:
 
 ## Features
 
--   **Native Linux Support:** Uses LuaJIT FFI to interface directly with X11 (`libX11`); no external Python scripts or background processes required.
--   **Smooth Tracking:** Implements adjustable Linear Interpolation (Lerp) for cinematic, non-jittery camera movement.
--   **Dynamic Panning:** Automatically calculates offsets to keep the mouse centered within a defined vertical viewport.
-
-## Prerequisites
-
--   **OBS Studio** (v21.0 or newer recommended).
--   **Desktop Environment:** Must be running **X11** (Xorg).
-    -   *Note: This script relies on `XQueryPointer` and will not work natively on Wayland sessions unless running via XWayland with specific permissions, which is not guaranteed.*
--   **Dependencies:** Standard X11 libraries (usually installed by default on Debian/Ubuntu/Fedora).
+-   **Native Linux Support:** Uses LuaJIT FFI to interface directly with X11 (`libX11`).
+-   **2D Tracking:** Follows the mouse in both X and Y axes.
+-   **Auto-Centering:** Optionally centers the tracking viewport within your OBS scene (great for recording small crops on a large canvas).
+-   **Automatic Axis Locking:** If your Target dimension matches your Source dimension, that axis automatically locks (prevents movement).
+-   **Smooth Tracking:** Adjustable tracking speed with interpolation.
 
 ## Installation
 
-1.  Download the `mouse_follow_linux.lua` file.
-2.  Open OBS Studio.
-3.  Go to **Tools** -> **Scripts**.
-4.  Click the **+** (Plus) icon in the bottom left.
-5.  Select the `mouse_follow_linux.lua` file.
+1.  Download `obs-mouse-tracker.lua`.
+2.  Open OBS Studio -> **Tools** -> **Scripts**.
+3.  Click **+** and select the file.
 
-## Configuration
+## Configuration & Use Cases
 
-### 1. OBS Video Settings
-To create vertical content, you must set your OBS Canvas to a vertical aspect ratio.
-1.  Go to **Settings** -> **Video**.
-2.  Set **Base (Canvas) Resolution** to `608x1080` (This is the 9:16 slice of a 1080p monitor).
-3.  Set **Output (Scaled) Resolution** to match (`608x1080`).
-4.  Set **FPS** to `60`.
+### 1. Vertical (9:16) TikTok/Shorts
+*Recording a vertical slice of a wide monitor.*
+* **OBS Video Settings:** Set Base Resolution to `608x1080`.
+* **Script Settings:**
+    * Source Width/Height: `1920` / `1080` (or your actual source resolution)
+    * Target Width/Height: `608` / `1080`
+    * Center Viewport: `Unchecked` (Usually not needed if canvas is already vertical)
 
-### 2. Scene Setup
-1.  Add a **Screen Capture (XSHM)** source.
-2.  Ensure it is capturing your full desktop (e.g., 1920x1080).
-3.  **Do not crop** the source manually. Let it extend past the edges of the canvas.
+### 2. The "Focus Box" (Square Crop)
+*Recording a zoomed-in 800x800 box around the cursor, centered on a 1080p canvas.*
+* **OBS Video Settings:** Base Resolution `1920x1080`.
+* **Script Settings:**
+    * Source Width/Height: `1920` / `1080`
+    * Target Width/Height: `800` / `800`
+    * Center Viewport: `Checked` (This keeps the box in the middle of your screen)
 
-### 3. Script Settings
-In the **Tools -> Scripts** window, click on `mouse_follow_linux.lua` to access the settings panel:
+## Settings Guide
 
 * **Source to Pan:** Select your Screen Capture (XSHM) source.
-* **Tracking Speed:** Controls the camera lag/follow speed.
-    * `0.1` = Cinematic/Slow
-    * `0.5` = Fast/Gaming
-    * `1.0` = Instant (No smoothing)
-* **Monitor Width:** Set to your physical monitor width (default `1920`).
-* **Canvas Width:** Set to your OBS Canvas width (default `608`).
-* **X Offset:** Adjust this if you have a multi-monitor setup and the cursor tracking is offset (e.g., if your main monitor is the second screen).
+* **Tracking Speed:**
+    * `0.1` = Cinematic / Slow
+    * `1.0` = Instant
+* **Center Viewport:** If checked, forces the tracking window to stay in the center of the OBS preview. If unchecked, the window defaults to the top-left (0,0).
+* **Source Dimensions:** Input the **current size of your source inside OBS**.
+    * *Important:* If you resized your source (e.g., "Fit to Screen" on a 1440p monitor onto a 1080p canvas), use the scaled size (1920x1080), not the physical monitor size.
+* **Target Dimensions:** The size of the "window" you want to see around the mouse.
+* **Offsets:** Use these if you have multiple monitors and the mouse coordinates are shifted.
 
 ## Troubleshooting
 
+### The source is shrinking or showing black bars?
+Check your **Source Dimensions**. If this setting is larger than the actual source in OBS, the script will try to scroll past the edge of the image. Ensure "Source Width/Height" matches the source's properties in OBS.
+
+### Camera moves when I don't want it to?
+The script moves the source *only* if the Target size is smaller than the Source size. If you want to lock the Y-axis, ensure **Target Height** is set to the same value as **Source Height**.
+
 ### "Error: Could not load libX11"
-The script attempts to load `libX11.so`, `libX11.so.6`, or `X11`. On some systems (like Debian/Ubuntu), the base `.so` file is part of the developer packages.
-
-If the script fails to load, try installing the development headers:
-
+Install development headers:
 ```bash
 sudo apt install libx11-dev
 ```
