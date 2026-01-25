@@ -4,6 +4,8 @@ A lightweight Lua script for OBS Studio that automatically pans a video source t
 
 This tool supports **vertical (9:16) content**, **square crops**, or **arbitrary 2D tracking**, allowing you to create any size "viewport" around your cursor.
 
+<video src="https://github.com/user-attachments/assets/90dd27aa-77c5-4e6f-86aa-b48425fe7d68" muted autoplay loop playsinline controls></video>
+
 ## Support
 
 If you find this script useful, please consider supporting me on Patreon:
