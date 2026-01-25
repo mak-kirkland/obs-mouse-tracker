@@ -1,6 +1,6 @@
-# OBS Linux Mouse Follower
+# OBS Mouse Follower (Linux & Windows)
 
-A lightweight Lua script for OBS Studio on Linux that automatically pans a video source to keep your mouse cursor centered within the viewport.
+A lightweight Lua script for OBS Studio that automatically pans a video source to keep your mouse cursor centered within the viewport.
 
 This tool supports **vertical (9:16) content**, **square crops**, or **arbitrary 2D tracking**, allowing you to create any size "viewport" around your cursor.
 
@@ -12,11 +12,13 @@ If you find this script useful, please consider supporting me on Patreon:
 
 ## Features
 
--   **Native Linux Support:** Uses LuaJIT FFI to interface directly with X11 (`libX11`).
+-   **Cross-Platform Support:** Works natively on **Linux (X11)** and **Windows** (via FFI).
+-   **Studio Mode Aware:** Intelligently detects Studio Mode and tracks the cursor in the **Preview** window, allowing you to prep shots before they go live.
 -   **2D Tracking:** Follows the mouse in both X and Y axes.
 -   **Auto-Centering:** Optionally centers the tracking viewport within your OBS scene (great for recording small crops on a large canvas).
 -   **Automatic Axis Locking:** If your Target dimension matches your Source dimension, that axis automatically locks (prevents movement).
 -   **Smooth Tracking:** Adjustable tracking speed with interpolation.
+-   **Performance Optimized:** Smart caching reduces CPU overhead by minimizing scene lookups.
 
 ## Installation
 
@@ -44,7 +46,7 @@ If you find this script useful, please consider supporting me on Patreon:
 
 ## Settings Guide
 
-* **Source to Pan:** Select your Screen Capture (XSHM) source.
+* **Source to Pan:** Select your Screen Capture (XSHM on Linux, Display Capture on Windows) source.
 * **Tracking Speed:**
     * `0.1` = Cinematic / Slow
     * `1.0` = Instant

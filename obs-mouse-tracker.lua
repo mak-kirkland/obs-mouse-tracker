@@ -1,37 +1,53 @@
--- OBS Studio Lua Script: Mouse Follower for Linux (X11)
+-- OBS Studio Lua Script: Mouse Follower for Linux (X11) & Windows
 -- Automatically pans a source to keep the mouse centered in the viewport.
 -- Supports Horizontal, Vertical, Box tracking, and Auto-Centering.
 --
 -- Author: Michael Kirkland (mak.kirkland@proton.me)
--- Requirements: Linux X11 environment
+-- Requirements: Linux X11 environment OR Windows
 
 local obs = obslua
 local ffi = require("ffi")
 
--- Define X11 structures and functions for FFI
-ffi.cdef[[
-    typedef unsigned long XID;
-    typedef XID Window;
-    typedef struct _XDisplay Display;
+-- Runtime State
+local x11_display = nil
+local user32 = nil
+local is_windows = (ffi.os == "Windows")
+local current_x = 0
+local current_y = 0
+local cached_scene_item = nil -- Cache for performance optimization
 
-    Display *XOpenDisplay(const char *display_name);
-    int XCloseDisplay(Display *display);
-    Window XDefaultRootWindow(Display *display);
+-- Define structures and functions for FFI based on OS
+if is_windows then
+    ffi.cdef[[
+        typedef struct { long x; long y; } POINT;
+        int GetCursorPos(POINT *lpPoint);
+    ]]
+else
+    -- Linux X11 Definitions
+    ffi.cdef[[
+        typedef unsigned long XID;
+        typedef XID Window;
+        typedef struct _XDisplay Display;
 
-    typedef int Bool;
+        Display *XOpenDisplay(const char *display_name);
+        int XCloseDisplay(Display *display);
+        Window XDefaultRootWindow(Display *display);
 
-    Bool XQueryPointer(
-        Display *display,
-        Window w,
-        Window *root_return,
-        Window *child_return,
-        int *root_x_return,
-        int *root_y_return,
-        int *win_x_return,
-        int *win_y_return,
-        unsigned int *mask_return
-    );
-]]
+        typedef int Bool;
+
+        Bool XQueryPointer(
+            Display *display,
+            Window w,
+            Window *root_return,
+            Window *child_return,
+            int *root_x_return,
+            int *root_y_return,
+            int *win_x_return,
+            int *win_y_return,
+            unsigned int *mask_return
+        );
+    ]]
+end
 
 -- Script Settings
 local settings = {
@@ -46,16 +62,10 @@ local settings = {
     y_offset = 0
 }
 
--- Runtime State
-local x11_display = nil
-local current_x = 0
-local current_y = 0
-local cached_scene_item = nil -- Cache for performance optimization
-
 -- Description shown in OBS
 function script_description()
     return [[
-LINUX X11 MOUSE FOLLOWER (2D + Centering)
+MOUSE FOLLOWER (Linux X11 & Windows)
 
 Pans a source to keep the mouse cursor centered.
 
@@ -139,44 +149,54 @@ function on_event(event)
     end
 end
 
--- Initialize X11 connection
+-- Initialize System connection (X11 or Windows)
 function script_load(settings)
     -- Add event callback for cache management
     obs.obs_frontend_add_event_callback(on_event)
 
-    -- List of library names to try.
-    -- Debian usually requires 'libX11.so.6' if the dev package isn't installed.
-    local lib_candidates = {
-        "X11",
-        "libX11.so",
-        "libX11.so.6",
-        "/usr/lib/x86_64-linux-gnu/libX11.so.6",
-        "/usr/lib/libX11.so.6"
-    }
-
-    local success = false
-    local lib = nil
-
-    for _, lib_name in ipairs(lib_candidates) do
-        success, lib = pcall(ffi.load, lib_name)
+    if is_windows then
+        -- Windows Initialization
+        local success, lib = pcall(ffi.load, "user32")
         if success then
-            obs.script_log(obs.LOG_INFO, "Loaded X11 library via: " .. lib_name)
-            break
+            user32 = lib
+            obs.script_log(obs.LOG_INFO, "Windows detected. Loaded user32.dll successfully.")
+        else
+            obs.script_log(obs.LOG_WARNING, "CRITICAL: Could not load user32.dll.")
         end
-    end
+    else
+        -- Linux X11 Initialization
+        local lib_candidates = {
+            "X11",
+            "libX11.so",
+            "libX11.so.6",
+            "/usr/lib/x86_64-linux-gnu/libX11.so.6",
+            "/usr/lib/libX11.so.6"
+        }
 
-    if not success then
-        obs.script_log(obs.LOG_WARNING, "CRITICAL: Could not load libX11.")
-        return
-    end
+        local success = false
+        local lib = nil
 
-    x11_display = lib.XOpenDisplay(nil)
-    if x11_display == nil then
-        obs.script_log(obs.LOG_WARNING, "Could not open X Display.")
-        return
-    end
+        for _, lib_name in ipairs(lib_candidates) do
+            success, lib = pcall(ffi.load, lib_name)
+            if success then
+                obs.script_log(obs.LOG_INFO, "Loaded X11 library via: " .. lib_name)
+                break
+            end
+        end
 
-    obs.script_log(obs.LOG_INFO, "X11 Display Opened Successfully.")
+        if not success then
+            obs.script_log(obs.LOG_WARNING, "CRITICAL: Could not load libX11.")
+            return
+        end
+
+        x11_display = lib.XOpenDisplay(nil)
+        if x11_display == nil then
+            obs.script_log(obs.LOG_WARNING, "Could not open X Display.")
+            return
+        end
+
+        obs.script_log(obs.LOG_INFO, "X11 Display Opened Successfully.")
+    end
 end
 
 -- Cleanup
@@ -193,24 +213,36 @@ end
 
 -- The main loop (runs every frame)
 function script_tick(seconds)
-    if x11_display == nil then return end
+    if not is_windows and x11_display == nil then return end
+    if is_windows and user32 == nil then return end
 
-    -- 1. Get Mouse Position from X11
-    local root = ffi.new("Window[1]")
-    local child = ffi.new("Window[1]")
-    local root_x = ffi.new("int[1]")
-    local root_y = ffi.new("int[1]")
-    local win_x = ffi.new("int[1]")
-    local win_y = ffi.new("int[1]")
-    local mask = ffi.new("unsigned int[1]")
+    local mouse_x_raw = 0
+    local mouse_y_raw = 0
 
-    local default_root = ffi.C.XDefaultRootWindow(x11_display)
-    local result = ffi.C.XQueryPointer(x11_display, default_root, root, child, root_x, root_y, win_x, win_y, mask)
+    if is_windows then
+        -- Windows Mouse Polling
+        local point = ffi.new("POINT")
+        if user32.GetCursorPos(point) == 0 then return end
+        mouse_x_raw = point.x - settings.x_offset
+        mouse_y_raw = point.y - settings.y_offset
+    else
+        -- Linux X11 Mouse Polling
+        local root = ffi.new("Window[1]")
+        local child = ffi.new("Window[1]")
+        local root_x = ffi.new("int[1]")
+        local root_y = ffi.new("int[1]")
+        local win_x = ffi.new("int[1]")
+        local win_y = ffi.new("int[1]")
+        local mask = ffi.new("unsigned int[1]")
 
-    if result == 0 then return end
+        local default_root = ffi.C.XDefaultRootWindow(x11_display)
+        local result = ffi.C.XQueryPointer(x11_display, default_root, root, child, root_x, root_y, win_x, win_y, mask)
 
-    local mouse_x_raw = root_x[0] - settings.x_offset
-    local mouse_y_raw = root_y[0] - settings.y_offset
+        if result == 0 then return end
+
+        mouse_x_raw = root_x[0] - settings.x_offset
+        mouse_y_raw = root_y[0] - settings.y_offset
+    end
 
     -- 2. Calculate Target Position (Relative to 0,0 of the Viewport)
     local desired_source_x = (settings.canvas_width / 2) - mouse_x_raw
