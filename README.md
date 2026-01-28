@@ -1,4 +1,4 @@
-# OBS Mouse Follower (Linux & Windows)
+# OBS Mouse Follower (Linux, Windows & macOS)
 
 A lightweight Lua script for OBS Studio that automatically pans a video source to keep your mouse cursor centered within the viewport.
 
@@ -15,13 +15,11 @@ If you find this script useful, please consider supporting me:
 
 ## Features
 
--   **Cross-Platform Support:** Works natively on **Linux (X11)** and **Windows** (via FFI).
--   **Studio Mode Aware:** Intelligently detects Studio Mode and tracks the cursor in the **Preview** window, allowing you to prep shots before they go live.
--   **2D Tracking:** Follows the mouse in both X and Y axes.
--   **Auto-Centering:** Optionally centers the tracking viewport within your OBS scene (great for recording small crops on a large canvas).
--   **Automatic Axis Locking:** If your Target dimension matches your Source dimension, that axis automatically locks (prevents movement).
--   **Smooth Tracking:** Adjustable tracking speed with interpolation.
--   **Performance Optimized:** Smart caching reduces CPU overhead by minimizing scene lookups.
+-   **Cross-Platform:** Native support for **Linux (X11)**, **Windows**, and **macOS**.
+-   **Studio Mode Aware:** Intelligently tracks the cursor in the **Preview** window, allowing you to prep shots before they go live.
+-   **Smooth Tracking:** Adjustable tracking speed with linear interpolation for organic movement.
+-   **Auto-Centering:** Optionally centers the tracking viewport within your OBS scene.
+-   **Performance Optimized:** Smart caching and event-based invalidation reduce CPU overhead.
 
 ## Installation
 

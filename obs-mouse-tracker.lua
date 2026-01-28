@@ -1,9 +1,9 @@
--- OBS Studio Lua Script: Mouse Follower for Linux (X11) & Windows
+-- OBS Studio Lua Script: Mouse Follower for Linux (X11), Windows & macOS
 -- Automatically pans a source to keep the mouse centered in the viewport.
 -- Supports Horizontal, Vertical, Box tracking, and Auto-Centering.
 --
 -- Author: Michael Kirkland (mak.kirkland@proton.me)
--- Requirements: Linux X11 environment OR Windows
+-- Requirements: Linux X11, Windows, or macOS
 
 local obs = obslua
 local ffi = require("ffi")
@@ -11,7 +11,12 @@ local ffi = require("ffi")
 -- Runtime State
 local x11_display = nil
 local user32 = nil
+local core_graphics = nil
+local core_foundation = nil
+
 local is_windows = (ffi.os == "Windows")
+local is_macos = (ffi.os == "OSX")
+
 local current_x = 0
 local current_y = 0
 local cached_scene_item = nil -- Cache for performance optimization
@@ -21,6 +26,17 @@ if is_windows then
     ffi.cdef[[
         typedef struct { long x; long y; } POINT;
         int GetCursorPos(POINT *lpPoint);
+    ]]
+elseif is_macos then
+    ffi.cdef[[
+        typedef struct { double x; double y; } CGPoint;
+        typedef void* CGEventRef;
+        typedef void* CGEventSourceRef;
+        typedef void* CFTypeRef;
+
+        CGEventRef CGEventCreate(CGEventSourceRef source);
+        CGPoint CGEventGetLocation(CGEventRef event);
+        void CFRelease(CFTypeRef cf);
     ]]
 else
     -- Linux X11 Definitions
@@ -65,7 +81,7 @@ local settings = {
 -- Description shown in OBS
 function script_description()
     return [[
-MOUSE FOLLOWER (Linux X11 & Windows)
+Mouse Tracker
 
 Pans a source to keep the mouse cursor centered.
 
@@ -108,9 +124,9 @@ function script_properties()
 
     -- Renamed to Source Width/Height to avoid confusion with physical monitors
     local p_mon = obs.obs_properties_create()
-    obs.obs_properties_add_group(props, "monitor_settings", "Source Dimensions (Input)", obs.OBS_GROUP_NORMAL, p_mon)
-    obs.obs_properties_add_int(p_mon, "source_width", "Source Width (in OBS)", 100, 7680, 1)
-    obs.obs_properties_add_int(p_mon, "source_height", "Source Height (in OBS)", 100, 4320, 1)
+    obs.obs_properties_add_group(props, "monitor_settings", "Source Dimensions", obs.OBS_GROUP_NORMAL, p_mon)
+    obs.obs_properties_add_int(p_mon, "source_width", "Source Width", 100, 7680, 1)
+    obs.obs_properties_add_int(p_mon, "source_height", "Source Height", 100, 4320, 1)
     obs.obs_properties_add_int(p_mon, "x_offset", "Cursor X Offset", -5000, 5000, 1)
     obs.obs_properties_add_int(p_mon, "y_offset", "Cursor Y Offset", -5000, 5000, 1)
 
@@ -149,7 +165,7 @@ function on_event(event)
     end
 end
 
--- Initialize System connection (X11 or Windows)
+-- Initialize System connection (X11, Windows, or macOS)
 function script_load(settings)
     -- Add event callback for cache management
     obs.obs_frontend_add_event_callback(on_event)
@@ -162,6 +178,18 @@ function script_load(settings)
             obs.script_log(obs.LOG_INFO, "Windows detected. Loaded user32.dll successfully.")
         else
             obs.script_log(obs.LOG_WARNING, "CRITICAL: Could not load user32.dll.")
+        end
+    elseif is_macos then
+        -- macOS Initialization
+        local cg_success, cg_lib = pcall(ffi.load, "CoreGraphics.framework/CoreGraphics")
+        local cf_success, cf_lib = pcall(ffi.load, "CoreFoundation.framework/CoreFoundation")
+
+        if cg_success and cf_success then
+            core_graphics = cg_lib
+            core_foundation = cf_lib
+            obs.script_log(obs.LOG_INFO, "macOS detected. Loaded CoreGraphics & CoreFoundation successfully.")
+        else
+            obs.script_log(obs.LOG_WARNING, "CRITICAL: Could not load macOS frameworks.")
         end
     else
         -- Linux X11 Initialization
@@ -204,6 +232,7 @@ function script_unload()
     if x11_display ~= nil then
         ffi.C.XCloseDisplay(x11_display)
     end
+    -- macOS and Windows libs don't strictly require explicit unload in LuaJIT FFI
 end
 
 -- Linear Interpolation helper
@@ -213,8 +242,9 @@ end
 
 -- The main loop (runs every frame)
 function script_tick(seconds)
-    if not is_windows and x11_display == nil then return end
+    if not is_windows and not is_macos and x11_display == nil then return end
     if is_windows and user32 == nil then return end
+    if is_macos and core_graphics == nil then return end
 
     local mouse_x_raw = 0
     local mouse_y_raw = 0
@@ -225,6 +255,20 @@ function script_tick(seconds)
         if user32.GetCursorPos(point) == 0 then return end
         mouse_x_raw = point.x - settings.x_offset
         mouse_y_raw = point.y - settings.y_offset
+
+    elseif is_macos then
+        -- macOS Mouse Polling
+        -- Create a NULL event, which reflects the current cursor position
+        local event = core_graphics.CGEventCreate(nil)
+        if event ~= nil then
+            local pt = core_graphics.CGEventGetLocation(event)
+            mouse_x_raw = pt.x - settings.x_offset
+            mouse_y_raw = pt.y - settings.y_offset
+            core_foundation.CFRelease(event) -- Must release the event to prevent memory leaks
+        else
+            return
+        end
+
     else
         -- Linux X11 Mouse Polling
         local root = ffi.new("Window[1]")
@@ -260,7 +304,6 @@ function script_tick(seconds)
     if desired_source_y < min_y then desired_source_y = min_y end
 
     -- 4. Apply Smoothing (Lerp)
-    -- If the camera is practically already there, skip the update logic to save CPU
     if math.abs(current_x - desired_source_x) < 0.5 and math.abs(current_y - desired_source_y) < 0.5 then
         return
     end
@@ -271,7 +314,7 @@ function script_tick(seconds)
     current_x = lerp(current_x, desired_source_x, t)
     current_y = lerp(current_y, desired_source_y, t)
 
-    -- 5. Calculate Final Position (Add Scene Centering Offset if enabled)
+    -- 5. Calculate Final Position
     local final_x = current_x
     local final_y = current_y
 
@@ -280,14 +323,12 @@ function script_tick(seconds)
         if obs.obs_get_video_info(video_info) then
             local base_width = video_info.base_width
             local base_height = video_info.base_height
-
-            -- Offset so the target viewport is centered in the base canvas
             final_x = final_x + (base_width - settings.canvas_width) / 2
             final_y = final_y + (base_height - settings.canvas_height) / 2
         end
     end
 
-    -- 6. Apply to OBS Scene Item
+    -- 6. Apply to OBS Scene Item (Optimized)
 
     -- If we have a cached item, verify it's still valid
     if cached_scene_item then
