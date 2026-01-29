@@ -181,15 +181,36 @@ function script_load(settings)
         end
     elseif is_macos then
         -- macOS Initialization
-        local cg_success, cg_lib = pcall(ffi.load, "CoreGraphics.framework/CoreGraphics")
-        local cf_success, cf_lib = pcall(ffi.load, "CoreFoundation.framework/CoreFoundation")
+        local function try_load(candidates)
+            for _, path in ipairs(candidates) do
+                local success, lib = pcall(ffi.load, path)
+                if success then return lib, path end
+            end
+            return nil, nil
+        end
 
-        if cg_success and cf_success then
+        -- Try absolute paths first, then relative, then short names
+        local cg_candidates = {
+            "/System/Library/Frameworks/CoreGraphics.framework/CoreGraphics",
+            "CoreGraphics.framework/CoreGraphics",
+            "CoreGraphics"
+        }
+
+        local cf_candidates = {
+            "/System/Library/Frameworks/CoreFoundation.framework/CoreFoundation",
+            "CoreFoundation.framework/CoreFoundation",
+            "CoreFoundation"
+        }
+
+        local cg_lib, cg_path = try_load(cg_candidates)
+        local cf_lib, cf_path = try_load(cf_candidates)
+
+        if cg_lib and cf_lib then
             core_graphics = cg_lib
             core_foundation = cf_lib
-            obs.script_log(obs.LOG_INFO, "macOS detected. Loaded CoreGraphics & CoreFoundation successfully.")
+            obs.script_log(obs.LOG_INFO, "macOS detected. Loaded frameworks via: " .. cg_path)
         else
-            obs.script_log(obs.LOG_WARNING, "CRITICAL: Could not load macOS frameworks.")
+            obs.script_log(obs.LOG_WARNING, "CRITICAL: Could not load macOS frameworks. Check permissions or try giving OBS full disk access.")
         end
     else
         -- Linux X11 Initialization
